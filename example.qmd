@@ -1,0 +1,125 @@
+---
+title: "STeMP: Example"
+format: html
+execute: 
+  warning: false
+  message: false
+  cache: false
+---
+
+The code to reproduce the modelling task presented as an example in the paper "STeMP: Spatio-Temporal Modelling Protocol". It uses the example data from @Meyer2025.
+
+```{r libraries}
+#| message: false
+#| warning: false
+#| include: false
+
+library(terra)
+library(sf)
+library(caret)
+library(CAST)
+library(ggplot2)
+library(tidyterra)
+```
+
+
+## Example data
+
+```{r data}
+data(splotdata)
+
+predictors <- rast("data/predictors.tif")
+
+# add coordinates as predictors
+predictors$X <- init(predictors, "x")
+predictors$Y <- init(predictors, "y")
+
+training_data <- splotdata["Species_richness"]
+training_data <- terra::extract(predictors, training_data, ID = FALSE, bind = TRUE) |> 
+    as.data.frame()
+
+modeldomain <- st_read("data/modeldomain.gpkg", quiet = TRUE)
+
+predictor_names <- names(predictors)
+response_name <- "Species_richness"
+
+# define color palette
+Okabe_Ito <- c("#E69F00", "#56B4E9", "#009E73", "#F0E442", "#CC79A7") 
+```
+
+
+```{r response}
+plot_resp <- ggplot() +
+    geom_sf(data = modeldomain) +
+    geom_sf(data = splotdata, aes(colour = Species_richness)) +
+    scale_colour_viridis_c() +
+    theme_minimal()
+plot_resp
+
+ggsave("figures/resp_plot.pdf", plot_resp)
+
+```
+
+
+```{r predictors}
+p <- predictors[[c("bio_4", "bio_12", "bio_8", "elev")]]
+names(p) <- c("Temp. Seasonality", "Annual Precipitation", "Temp. wettest quarter", "Elevation")
+
+range01 <- function(x) {
+  (x - min(x, na.rm = TRUE)) /
+    (max(x, na.rm = TRUE) - min(x, na.rm = TRUE))
+}
+
+p_rescaled <- terra::app(p, range01)
+
+plot_predictors <- ggplot() +
+    geom_spatraster(data = p_rescaled) +
+    scale_fill_viridis_c(na.value = NA, limits = c(0,1), name = NULL, breaks = c(0,1), labels = c("low", "high")) +
+    facet_wrap(~lyr) +
+    theme_minimal()
+plot_predictors
+
+ggsave("figures/predictors_plot.pdf", plot_predictors)
+
+```
+
+
+
+## Train a random forest model
+
+```{r rcv-model}
+predictor_names <- c("bio_4", "bio_12", "bio_8", "elev", "X", "Y")
+
+tune_grid <- expand.grid(mtry = c(2:length(predictor_names)), splitrule = "variance", min.node.size = 5)
+
+set.seed(10)
+rfmodel_rcv <- caret::train(x = training_data |> select(all_of(predictor_names)),
+                            y = training_data |> pull(response_name),
+                            method = "ranger",
+                            num.trees = 100,
+                            tuneGrid = tune_grid,
+                            trControl = trainControl(method = "cv",
+                                                     savePredictions = TRUE))
+
+prediction_rcv <- predict(predictors, rfmodel_rcv, na.rm = TRUE)
+
+global_validation(rfmodel_rcv)["Rsquared"]
+
+saveRDS(rfmodel_rcv, "model.RDS")
+```
+
+
+```{r rcv-prediction}
+plot_prediction <- ggplot() +
+    geom_spatraster(data = prediction_rcv) +
+    scale_fill_viridis_c("predicted plant species richness", na.value = NA) +
+    theme_minimal() +
+    theme(legend.position = "bottom", legend.title.position = "top", 
+          legend.key.width = unit(8, "mm"), legend.key.height = unit(2, "mm"))
+
+plot_prediction
+
+ggsave("figures/prediction_plot.pdf", plot_prediction, width = 4, height = 6.5)
+
+```
+
