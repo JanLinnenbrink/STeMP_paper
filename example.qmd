@@ -28,6 +28,9 @@ library(tidyterra)
 ```{r data}
 data(splotdata)
 
+tpoints <- st_as_sfc(splotdata)
+st_write(tpoints, "data/tpoints.gpkg")
+
 predictors <- rast("data/predictors.tif")
 
 # add coordinates as predictors
