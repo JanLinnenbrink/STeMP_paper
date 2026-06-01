@@ -68,12 +68,7 @@ ggsave("figures/resp_plot.pdf", plot_resp)
 p <- predictors[[c("bio_4", "bio_12", "bio_8", "elev")]]
 names(p) <- c("Temp. Seasonality", "Annual Precipitation", "Temp. wettest quarter", "Elevation")
 
-range01 <- function(x) {
-  (x - min(x, na.rm = TRUE)) /
-    (max(x, na.rm = TRUE) - min(x, na.rm = TRUE))
-}
-
-p_rescaled <- terra::app(p, range01)
+p_rescaled <- terra::stretch(p, minv = 0, maxv = 1)
 
 plot_predictors <- ggplot() +
     geom_spatraster(data = p_rescaled) +
