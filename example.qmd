@@ -29,7 +29,7 @@ library(tidyterra)
 data(splotdata)
 
 tpoints <- st_as_sfc(splotdata)
-st_write(tpoints, "data/tpoints.gpkg")
+st_write(tpoints, "data/tpoints.gpkg", append = FALSE)
 
 predictors <- rast("data/predictors.tif")
 
